@@ -83,7 +83,7 @@ while true
     
     %in case there is an obstacle, we set obstacle avoidance acc/dec here
     [robot_params.max_v_, robot_params.max_acc_v_, robot_params.max_dec_v_] =...
-        setObstacleAvoidanceAcc(robot_params, obstacle_params, front_dist, target_point);
+        setObstacleAvoidanceAcc(robot_params, obstacle_params, robot_state);
     
     % update max v for dec-start and cal prerequisites for the
     % decceleration such as least distance for current speed

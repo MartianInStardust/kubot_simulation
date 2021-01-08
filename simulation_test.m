@@ -3,11 +3,11 @@ clear;clc;close all;
 % define model target point
 % initial conditions current position and velocity and distance towards
 % target point 
-target_point = 10;
+target_point = 20;
 t = 0;
 global max_acc_v;
 global max_dec_v;
-obs_presence = true;
+obs_presence = false;
 dist_mark = 0;
 t_mark = 0;
 v_mark = 0;
@@ -43,11 +43,13 @@ itercount = [];
 vlist = [];
 dlist = [];
 iter = 0;
+front_dist_prev = robot_state.target_point - robot_state.cur_p;
 
 %------now starts the moving process------
 while true
     %cal front distance 
     front_dist = robot_state.target_point - robot_state.cur_p;
+   
     
     
     %if front distance is larger than 3.5 set it to 3.5 this is for p(PID)
@@ -55,7 +57,7 @@ while true
     if abs(front_dist) > 3.5
         delta_s = 3.5;
     else
-        delta_s = abs(front_dist*0.7);
+        delta_s = abs(front_dist);
     end
     
     %now we can update the acceleration and decceleration here
@@ -148,6 +150,7 @@ while true
         tar_v = linearTrapezoid(robot_state.cur_v, tar_v);
         
     end
+    front_dist_prev = front_dist;
     
     %now that the target v has been picked with all the conditions
     %considered, one can assign it to cur_v confidently    
@@ -160,7 +163,7 @@ while true
     remain_dist = robot_state.target_point - robot_state.cur_p - delta_movement;    
     itercount = [itercount, t];
     %fprintf('%d\n',iter);
-    if remain_dist > 0.78 && remain_dist < 0.82
+    if abs(remain_dist - 0.8)  < 0.01
         dist_mark = remain_dist;
         t_mark = t;
         v_mark = robot_state.cur_v;
@@ -169,11 +172,13 @@ while true
     vlist = [vlist, robot_state.cur_v];
     iter = iter + 1;
     %now draw the output 
-    if iter > 2500 %size(vlist,2) > 10 && sum(vlist(end-10:end)) == 0
+    if iter > 2000 %size(vlist,2) > 10 && sum(vlist(end-10:end)) == 0
         figure(1);
-        subplot(2,1,1);
+        subplot(3,1,1);
         plot(itercount, dlist);
         hold on;
+        
+        yline(obstacle_params.obs_point + 3.2, '-', 'within 3.2m' );
         yline(obstacle_params.obs_point + 0.8, '-', 'within 0.8m' );
         yline(obstacle_params.obs_point, '-', 'obstacle point' );
         yline(dist_mark, '-', dist_mark );
@@ -181,18 +186,41 @@ while true
         title('remaining distance VS time');
         xlabel('time(s)');
         ylabel('remain distance (m)');
-        subplot(2,1,2);
+        subplot(3,1,2);
         plot(itercount, vlist);
         hold on;
+        plot(itercount,original_tarv);
+        hold on;
+        xi = 0:0.01:t;
+        yi = pchip(itercount,vlist,xi);
+        plot(xi,yi,itercount,vlist);
+        
 %         plot(itercount, dec_list);
         xline(t_mark, '-', ' point' );
         yline(v_mark, '-', v_mark );
         title('velocity VS time');        
         xlabel('time(s)');
         ylabel('velocity(m/s)');
+        legend('actual v out','target v out')
         
         
-        
+        %start animation here
+       
+        % Draw initial figure -- (2)
+        subplot(3,1,3);
+        h = plot(dlist(1), 0, 'o', 'MarkerSize' ,20, 'MarkerFaceColor', 'b');
+        xline(obstacle_params.obs_point + 3.2, '-', 'within 3.2m' );
+        xline(obstacle_params.obs_point + 0.8, '-', 'within 0.8m' );
+        xline(obstacle_params.obs_point, '-', 'obstacle point' );
+        grid on;
+        xlim([0, target_point]);
+        ylim([-1.5, 1.5]);
+
+        % Animation loop -- (3)
+        for i = 1:length(itercount)
+            set(h, 'XData', dlist(i));
+            drawnow;
+        end
         break
     end 
 end
