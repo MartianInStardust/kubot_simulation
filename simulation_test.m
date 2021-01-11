@@ -3,7 +3,7 @@ clear;clc;close all;
 % define model target point
 % initial conditions current position and velocity and distance towards
 % target point 
-target_point = 20;
+target_point = 10;
 t = 0;
 global max_acc_v;
 global max_dec_v;
@@ -18,7 +18,7 @@ robot_state = struct('cur_p', 0, 'cur_v', 0, 'target_point', target_point);
 % import all the robot parameter from csv file
 file_name = 'params_adjustment.csv';
 params_table = readtable(file_name);
-selected_params = params_table(1, :)
+selected_params = params_table(6, 1:14)
 robot_params = table2struct(selected_params);
 
 % generate obstacle and set obstacle state
@@ -42,8 +42,11 @@ original_tarv = [];
 itercount = [];
 vlist = [];
 dlist = [];
+curr_pos_list = [];
 iter = 0;
 front_dist_prev = robot_state.target_point - robot_state.cur_p;
+max_acc_v_list = [];
+max_dec_v_list = [];
 
 %------now starts the moving process------
 while true
@@ -66,6 +69,8 @@ while true
                 abs((robot_params.max_v_/2 -robot_state.cur_v) / (robot_params.max_v_/2));
     max_dec_v = robot_params.dec_init + (robot_params.dec_incre + 0.25) *...
                 ((2.0 * (robot_params.max_v_ / (robot_params.max_v_ + abs(robot_state.cur_v))))^1.5);
+    max_acc_v_list = [max_acc_v_list, max_acc_v];
+    max_dec_v_list = [max_dec_v_list, max_dec_v];
     dec_list = [dec_list, max_dec_v];
     
     %in case there is an obstacle, we set obstacle avoidance acc/dec here
@@ -86,12 +91,15 @@ while true
     if abs(front_dist) > 0.4
         tar_v = delta_s * robot_params.k_dist;
         original_tarv = [original_tarv, tar_v];
+        
         %this is to make sure when we need to decelerate we can do it
         %safely
         if abs(front_dist) < dec_start
             v_dec_temp = sqrt(abs(max_v_inque^2 - 2 * robot_params.dec_init * abs((abs(front_dist) - dec_start))));
             tar_v = min(tar_v, v_dec_temp);
+            
         end
+        
         
         %this is to supress the velocity shooting too high        
         tar_v = min(robot_params.max_v_, tar_v);
@@ -103,7 +111,7 @@ while true
         
         %linearTrapezoid is to make sure the tar_v is within the reach of
         %current speed and accleration limit
-        tar_v = linearTrapezoid(robot_state.cur_v, tar_v);
+        tar_v = linearTrapezoid(robot_params, robot_state, tar_v);
         %assign current v to tar_v_pre(previous)
         tar_v_pre = tar_v;
         %cal the decceleration val with the tar_v_pre set the minimum
@@ -147,7 +155,7 @@ while true
         end
         
         original_tarv = [original_tarv, tar_v];
-        tar_v = linearTrapezoid(robot_state.cur_v, tar_v);
+        tar_v = linearTrapezoid(robot_params,robot_state, tar_v);
         
     end
     front_dist_prev = front_dist;
@@ -168,18 +176,20 @@ while true
         t_mark = t;
         v_mark = robot_state.cur_v;
     end
+    curr_pos_list = [curr_pos_list, robot_state.cur_p];
     dlist = [dlist, remain_dist];
     vlist = [vlist, robot_state.cur_v];
     iter = iter + 1;
     %now draw the output 
-    if iter > 2000 %size(vlist,2) > 10 && sum(vlist(end-10:end)) == 0
+    if size(vlist,2) > 10 && sum(vlist(end-10:end)) <= 0
         figure(1);
         subplot(3,1,1);
         plot(itercount, dlist);
         hold on;
+        plot(itercount, curr_pos_list);
         
-        yline(obstacle_params.obs_point + 3.2, '-', 'within 3.2m' );
-        yline(obstacle_params.obs_point + 0.8, '-', 'within 0.8m' );
+        yline(obstacle_params.obs_point - 3.2, '-', 'within 3.2m' );
+        yline(obstacle_params.obs_point - 0.8, '-', 'within 0.8m' );
         yline(obstacle_params.obs_point, '-', 'obstacle point' );
         yline(dist_mark, '-', dist_mark );
         xline(t_mark, '-', ' point' );
@@ -205,22 +215,30 @@ while true
         
         
         %start animation here
-       
-        % Draw initial figure -- (2)
         subplot(3,1,3);
-        h = plot(dlist(1), 0, 'o', 'MarkerSize' ,20, 'MarkerFaceColor', 'b');
-        xline(obstacle_params.obs_point + 3.2, '-', 'within 3.2m' );
-        xline(obstacle_params.obs_point + 0.8, '-', 'within 0.8m' );
+        
+        h = plot(curr_pos_list(1), 0, 'o', 'MarkerSize' ,20, 'MarkerFaceColor', 'b');
+        xline(obstacle_params.obs_point - 3.2, '-', 'within 3.2m' );
+        xline(obstacle_params.obs_point - 0.8, '-', 'within 0.8m' );
         xline(obstacle_params.obs_point, '-', 'obstacle point' );
         grid on;
         xlim([0, target_point]);
         ylim([-1.5, 1.5]);
+        title('Animation'); 
 
         % Animation loop -- (3)
         for i = 1:length(itercount)
-            set(h, 'XData', dlist(i));
+            set(h, 'XData', curr_pos_list(i));
             drawnow;
         end
+        
+        figure(2);
+        plot(vlist, max_acc_v_list);
+        hold on;
+        plot(vlist, max_dec_v_list);
+        xlabel('current velocity(m/s)');
+        ylabel('acceleration/deceleration(m/s^2)');
+        legend('max acc','max dec')
         break
     end 
 end
