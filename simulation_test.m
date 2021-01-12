@@ -10,15 +10,19 @@ global max_dec_v;
 obs_presence = false;
 dist_mark = 0;
 t_mark = 0;
+t_dec_mark = 0;
 v_mark = 0;
 %--------- set up all the robot enviroments----------
 %set the robot state 
 robot_state = struct('cur_p', 0, 'cur_v', 0, 'target_point', target_point);
 
+total_dist = target_point - robot_state.cur_p;
+remain_dist = total_dist;
+
 % import all the robot parameter from csv file
 file_name = 'params_adjustment.csv';
 params_table = readtable(file_name);
-selected_params = params_table(6, 1:14)
+selected_params = params_table(8, 1:14);
 robot_params = table2struct(selected_params);
 
 % generate obstacle and set obstacle state
@@ -47,7 +51,8 @@ iter = 0;
 front_dist_prev = robot_state.target_point - robot_state.cur_p;
 max_acc_v_list = [];
 max_dec_v_list = [];
-
+insert = 'acc';
+insert_row = 11;
 %------now starts the moving process------
 while true
     %cal front distance 
@@ -61,6 +66,24 @@ while true
         delta_s = 3.5;
     else
         delta_s = abs(front_dist);
+    end
+    
+    switch(insert)
+        case 'acc'
+            if remain_dist/total_dist <= 0.8
+                selected_params = params_table(insert_row - 1, 1:14);
+                robot_params = table2struct(selected_params);        
+            end
+        case 'dec_first'
+            if remain_dist/total_dist <= (3.5/target_point)
+                selected_params = params_table(insert_row - 1, 1:14);
+                robot_params = table2struct(selected_params);        
+            end
+        case 'dec_sec'
+            if remain_dist/total_dist < (0.2/target_point)
+                selected_params = params_table(insert_row - 1, 1:14);
+                robot_params = table2struct(selected_params);        
+            end
     end
     
     %now we can update the acceleration and decceleration here
@@ -91,19 +114,21 @@ while true
     if abs(front_dist) > 0.4
         tar_v = delta_s * robot_params.k_dist;
         original_tarv = [original_tarv, tar_v];
+        %this is to supress the velocity shooting too high        
+        tar_v = min(robot_params.max_v_, tar_v);
         
         %this is to make sure when we need to decelerate we can do it
         %safely
+        
+        
+        
+        if abs(front_dist - dec_start) < 0.01
+            t_dec_mark = t;
+        end
         if abs(front_dist) < dec_start
             v_dec_temp = sqrt(abs(max_v_inque^2 - 2 * robot_params.dec_init * abs((abs(front_dist) - dec_start))));
-            tar_v = min(tar_v, v_dec_temp);
-            
-        end
-        
-        
-        %this is to supress the velocity shooting too high        
-        tar_v = min(robot_params.max_v_, tar_v);
-               
+            tar_v = min(tar_v, v_dec_temp);        
+        end              
         %if we are surpassing the target point we go back
         if robot_state.cur_p > robot_state.target_point
             tar_v = -tar_v;
@@ -112,6 +137,10 @@ while true
         %linearTrapezoid is to make sure the tar_v is within the reach of
         %current speed and accleration limit
         tar_v = linearTrapezoid(robot_params, robot_state, tar_v);
+        
+%         if tar_v > 1.0 && tar_v < 1.3
+%             tar_v = 0.5;
+%         end
         %assign current v to tar_v_pre(previous)
         tar_v_pre = tar_v;
         %cal the decceleration val with the tar_v_pre set the minimum
@@ -127,7 +156,9 @@ while true
         tar_v_virtual =  robot_params.k_v_short * temp_dist;
     %here we enter into second range control which is smaller than 0.4
     else
-        % what is this temp_dist? hard coded?
+        % this portion of the control is to cover the case when the robot
+        % moves towards the end of the target point temp_dist is a manuel
+        % made function to relate the current position with the velocity 
         temp_dist = abs(remain_dist+0.5*(abs(remain_dist/0.4)))^robot_params.gamma;
         %here k_v_short is 0.302
         tar_v_k =  robot_params.k_v_short * temp_dist;
@@ -176,12 +207,17 @@ while true
         t_mark = t;
         v_mark = robot_state.cur_v;
     end
+    
+    if abs(remain_dist - 3.5) < 0.01
+        t_mark_dec = t;
+    end
+        
     curr_pos_list = [curr_pos_list, robot_state.cur_p];
     dlist = [dlist, remain_dist];
     vlist = [vlist, robot_state.cur_v];
     iter = iter + 1;
     %now draw the output 
-    if size(vlist,2) > 10 && sum(vlist(end-10:end)) <= 0
+    if size(vlist,2) > 10 && sum(vlist(end-10:end)) <= 0 %iter>4000
         figure(1);
         subplot(3,1,1);
         plot(itercount, dlist);
@@ -193,6 +229,7 @@ while true
         yline(obstacle_params.obs_point, '-', 'obstacle point' );
         yline(dist_mark, '-', dist_mark );
         xline(t_mark, '-', ' point' );
+        xline(t_dec_mark, '-', 'dec point' );
         title('remaining distance VS time');
         xlabel('time(s)');
         ylabel('remain distance (m)');
@@ -207,6 +244,7 @@ while true
         
 %         plot(itercount, dec_list);
         xline(t_mark, '-', ' point' );
+        xline(t_dec_mark, '-', 'dec point' );
         yline(v_mark, '-', v_mark );
         title('velocity VS time');        
         xlabel('time(s)');
@@ -224,6 +262,7 @@ while true
         grid on;
         xlim([0, target_point]);
         ylim([-1.5, 1.5]);
+        xlabel('distance(m)');
         title('Animation'); 
 
         % Animation loop -- (3)
