@@ -3,15 +3,11 @@ clear;clc;close all;
 % define model target point
 % initial conditions current position and velocity and distance towards
 % target point 
-target_point = 10;
-t = 0;
 global max_acc_v;
 global max_dec_v;
-obs_presence = false;
-dist_mark = 0;
-t_mark = 0;
-t_dec_mark = 0;
-v_mark = 0;
+target_point = 15;
+t = 0;
+
 %--------- set up all the robot enviroments----------
 %set the robot state 
 robot_state = struct('cur_p', 0, 'cur_v', 0, 'target_point', target_point);
@@ -22,16 +18,23 @@ remain_dist = total_dist;
 % import all the robot parameter from csv file
 file_name = 'params_adjustment.csv';
 params_table = readtable(file_name);
-selected_params = params_table(8, 1:14);
+selected_row = 9;
+selected_params = params_table(selected_row - 1, 1:14);
 robot_params = table2struct(selected_params);
 
 % generate obstacle and set obstacle state
 obs_point = genObs(target_point, false);
 obstacle_params = struct('obs_point', obs_point, 'obstacle_avoidance_acc', 1.51111);
 
+
 %----------set up all the necessary variables---------
+front_dist_prev = robot_state.target_point - robot_state.cur_p;
 std_dev_v = 0.001;
 std_dev_t = 0.0005;
+dist_mark = 0;
+t_mark = 0;
+t_dec_mark = 0;
+v_mark = 0;
 % model
 max_v_inque = robot_params.max_v_;
 max_acc_v = robot_params.max_acc_v_;
@@ -48,11 +51,13 @@ vlist = [];
 dlist = [];
 curr_pos_list = [];
 iter = 0;
-front_dist_prev = robot_state.target_point - robot_state.cur_p;
 max_acc_v_list = [];
 max_dec_v_list = [];
-insert = 'acc';
-insert_row = 11;
+insert_status = false;
+insert = control_stage.acc;
+insert_row = 12;
+obs_presence = true;
+%%
 %------now starts the moving process------
 while true
     %cal front distance 
@@ -68,7 +73,11 @@ while true
         delta_s = abs(front_dist);
     end
     
-    switch(insert)
+    
+    %this block of code is used to test inserting different robot_params in
+    %different control stage
+    if insert_status
+        switch(insert)
         case 'acc'
             if remain_dist/total_dist <= 0.8
                 selected_params = params_table(insert_row - 1, 1:14);
@@ -84,7 +93,10 @@ while true
                 selected_params = params_table(insert_row - 1, 1:14);
                 robot_params = table2struct(selected_params);        
             end
+        end
     end
+    
+    
     
     %now we can update the acceleration and decceleration here
     %setNormalAcc(robot_params,cur_v);

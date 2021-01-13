@@ -11,7 +11,7 @@ cur_v = robot_state.cur_v;
         if tar_v_ >= cur_v
             tar_v = min((cur_v + max_acc_v * m_sampling_time), tar_v_);
             %                         tar_v = min(abs(max_v_*sin((cur_v+0.05)/max_v_/pi)), tar_v);
-        else
+        else 
             tar_v = max((cur_v - max_dec_v * m_sampling_time), tar_v_);
         end
     else
