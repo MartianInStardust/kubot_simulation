@@ -9,7 +9,7 @@ function [max_v_, max_acc_v_, max_dec_v_ ] = setObstacleAvoidanceAcc(robot_param
     
     % no detection
     if obs_point >= robot_state.target_point 
-        % do nothing
+        % do nothing 
         
     % far detection
     elseif (obs_point - cur_p) < 3.2 && (obs_point - cur_p) > 2.3
